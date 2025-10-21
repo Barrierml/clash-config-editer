@@ -1,5 +1,6 @@
 import { dump } from 'js-yaml';
 import type { AppSettings, ProxyNode, ProxyPool } from '../types';
+import { normalizeStrategy } from '../types';
 
 export function extractFlagEmoji(text: string): string | undefined {
   const match = text.match(/[\u{1F1E6}-\u{1F1FF}]{2}/u);
@@ -66,7 +67,7 @@ export function generateConfigYaml(
 
       return {
         name: groupName,
-        strategy: pool.strategy,
+        strategy: normalizeStrategy(pool.strategy),
         port: pool.port,
         proxies: filteredMembers
       };
@@ -90,7 +91,7 @@ export function generateConfigYaml(
     proxies: group.proxies
   }));
 
-  const rules = sanitizedGroups.map((group) => `INBOUND-TAG,in-${group.port},${group.name}`);
+  const rules = sanitizedGroups.map((group) => `IN-PORT,${group.port},${group.name}`);
   if (sanitizedGroups.length > 0) {
     rules.push(`MATCH,${sanitizedGroups[0].name}`);
   } else {

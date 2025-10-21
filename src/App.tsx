@@ -7,13 +7,28 @@ import { Card, CardContent, CardHeader, CardTitle } from './components/ui/card';
 import { Input } from './components/ui/input';
 import { Label } from './components/ui/label';
 import { Select } from './components/ui/select';
-import type { AppSettings, ProxyNode, ProxyPool } from './types';
-import { DEFAULT_SETTINGS, generateConfigYaml, persistState, readState } from './lib/utils';
+import type {
+  AppSettings,
+  ProxyNode,
+  ProxyPool,
+  SavedConfig,
+  UploadedConfigSource
+} from './types';
+import { LOAD_BALANCE_STRATEGIES, normalizeStrategy } from './types';
+import { DEFAULT_SETTINGS, dedupeNodes, generateConfigYaml, persistState, readState } from './lib/utils';
 import { parseClashConfig } from './lib/parser';
 
 const POOL_STORAGE_KEY = 'ccg:pools';
 const SETTINGS_STORAGE_KEY = 'ccg:settings';
+const SAVED_CONFIGS_STORAGE_KEY = 'ccg:saved-configs';
 const BASE_POOL_PORT = 7890;
+
+function sanitizePool(pool: ProxyPool): ProxyPool {
+  return {
+    ...pool,
+    strategy: normalizeStrategy(pool.strategy)
+  };
+}
 
 function generateId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -61,12 +76,22 @@ function ConfigGeneratorApp(): JSX.Element {
   const [selectedNodes, setSelectedNodes] = React.useState<Set<string>>(new Set());
   const [pools, setPools] = React.useState<ProxyPool[]>([]);
   const [settings, setSettings] = React.useState<AppSettings>(DEFAULT_SETTINGS);
+  const [uploadedFiles, setUploadedFiles] = React.useState<UploadedConfigSource[]>([]);
+  const [savedConfigs, setSavedConfigs] = React.useState<SavedConfig[]>([]);
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
-    setPools(readState<ProxyPool[]>(POOL_STORAGE_KEY, []));
+    const restoredPools = readState<ProxyPool[]>(POOL_STORAGE_KEY, []).map(sanitizePool);
+    setPools(restoredPools);
     const restoredSettings = readState<AppSettings>(SETTINGS_STORAGE_KEY, DEFAULT_SETTINGS);
     setSettings({ ...DEFAULT_SETTINGS, ...restoredSettings });
+    const restoredConfigs = readState<SavedConfig[]>(SAVED_CONFIGS_STORAGE_KEY, []).map((config) => ({
+      ...config,
+      files: Array.isArray(config.files)
+        ? config.files.map((file) => ({ ...file, id: file.id ?? generateId() }))
+        : []
+    }));
+    setSavedConfigs(restoredConfigs);
   }, []);
 
   React.useEffect(() => {
@@ -79,18 +104,56 @@ function ConfigGeneratorApp(): JSX.Element {
     persistState(SETTINGS_STORAGE_KEY, settings);
   }, [settings]);
 
-  const handleParse = React.useCallback(() => {
-    if (!yamlText.trim()) {
-      setWarnings(['Please provide YAML content first.']);
-      setNodes([]);
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    persistState(SAVED_CONFIGS_STORAGE_KEY, savedConfigs);
+  }, [savedConfigs]);
+
+  const parseSources = React.useCallback(
+    (manual: string, files: UploadedConfigSource[]) => {
+      const sources: Array<{ label?: string; text: string }> = [];
+      if (manual.trim()) {
+        sources.push({ label: 'Pasted YAML', text: manual });
+      }
+      for (const file of files) {
+        if (file.content.trim()) {
+          sources.push({ label: file.name, text: file.content });
+        }
+      }
+
+      if (sources.length === 0) {
+        setNodes([]);
+        setWarnings(['Please provide YAML content first.']);
+        setSelectedNodes(new Set());
+        return;
+      }
+
+      const aggregatedNodes: ProxyNode[] = [];
+      const aggregatedWarnings: string[] = [];
+
+      for (const source of sources) {
+        const result = parseClashConfig(source.text);
+        aggregatedNodes.push(...result.nodes);
+        const prefix = source.label ? `${source.label}: ` : '';
+        aggregatedWarnings.push(...result.warnings.map((warning) => `${prefix}${warning}`));
+      }
+
+      const deduped = dedupeNodes(aggregatedNodes);
+
+      if (deduped.length === 0 && aggregatedWarnings.length === 0) {
+        aggregatedWarnings.push('No proxies were found across the provided configurations.');
+      }
+
+      setNodes(deduped);
+      setWarnings(aggregatedWarnings);
       setSelectedNodes(new Set());
-      return;
-    }
-    const result = parseClashConfig(yamlText);
-    setNodes(result.nodes);
-    setWarnings(result.warnings);
-    setSelectedNodes(new Set());
-  }, [yamlText]);
+    },
+    [setNodes, setSelectedNodes, setWarnings]
+  );
+
+  const handleParse = React.useCallback(() => {
+    parseSources(yamlText, uploadedFiles);
+  }, [parseSources, uploadedFiles, yamlText]);
 
   const toggleNode = React.useCallback((name: string) => {
     setSelectedNodes((prev) => {
@@ -118,6 +181,82 @@ function ConfigGeneratorApp(): JSX.Element {
     });
   }, []);
 
+  const handleFilesAdded = React.useCallback(
+    (files: { name: string; content: string }[]) => {
+      if (files.length === 0) return;
+      setUploadedFiles((prev) => {
+        const additions = files.map((file) => ({
+          id: generateId(),
+          name: file.name,
+          content: file.content
+        }));
+        const next = [...prev, ...additions];
+        parseSources(yamlText, next);
+        return next;
+      });
+    },
+    [parseSources, yamlText]
+  );
+
+  const handleRemoveFile = React.useCallback(
+    (id: string) => {
+      setUploadedFiles((prev) => {
+        const next = prev.filter((file) => file.id !== id);
+        parseSources(yamlText, next);
+        return next;
+      });
+    },
+    [parseSources, yamlText]
+  );
+
+  const handleClearFiles = React.useCallback(() => {
+    setUploadedFiles([]);
+    parseSources(yamlText, []);
+  }, [parseSources, yamlText]);
+
+  const handleSaveConfig = React.useCallback(
+    (name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) {
+        return;
+      }
+      if (!yamlText.trim() && uploadedFiles.length === 0) {
+        return;
+      }
+
+      setSavedConfigs((prev) => {
+        const usedNames = new Set(prev.map((config) => config.name));
+        const resolvedName = ensureUniqueName(trimmed, usedNames);
+        const snapshot: SavedConfig = {
+          id: generateId(),
+          name: resolvedName,
+          manualText: yamlText,
+          files: uploadedFiles.map((file) => ({ ...file })),
+          createdAt: Date.now()
+        };
+        return [...prev, snapshot];
+      });
+    },
+    [uploadedFiles, yamlText]
+  );
+
+  const handleLoadConfig = React.useCallback(
+    (id: string) => {
+      const config = savedConfigs.find((item) => item.id === id);
+      if (!config) {
+        return;
+      }
+      setYamlText(config.manualText);
+      setUploadedFiles(config.files.map((file) => ({ ...file })));
+      parseSources(config.manualText, config.files);
+    },
+    [parseSources, savedConfigs]
+  );
+
+  const handleDeleteConfig = React.useCallback((id: string) => {
+    setSavedConfigs((prev) => prev.filter((config) => config.id !== id));
+  }, []);
+
   const createPool = () => {
     setPools((prev) => {
       const usedPorts = new Set(prev.map((pool) => pool.port));
@@ -133,7 +272,7 @@ function ConfigGeneratorApp(): JSX.Element {
         {
           id: generateId(),
           name,
-          strategy: 'random',
+          strategy: LOAD_BALANCE_STRATEGIES[0],
           port,
           proxies: []
         }
@@ -161,7 +300,7 @@ function ConfigGeneratorApp(): JSX.Element {
         nextPools.push({
           id: generateId(),
           name,
-          strategy: 'random',
+          strategy: LOAD_BALANCE_STRATEGIES[0],
           port,
           proxies: [proxyName]
         });
@@ -186,7 +325,7 @@ function ConfigGeneratorApp(): JSX.Element {
             ? { ...patch, name: ensureUniqueName(patch.name, usedNames, nodeNames) }
             : patch;
 
-        return { ...pool, ...nextPatch, proxies: pool.proxies };
+        return sanitizePool({ ...pool, ...nextPatch, proxies: pool.proxies });
       });
     });
   };
@@ -278,7 +417,20 @@ function ConfigGeneratorApp(): JSX.Element {
       </header>
 
       <section>
-        <FileUpload value={yamlText} onChange={setYamlText} onParse={handleParse} warnings={warnings} />
+        <FileUpload
+          manualText={yamlText}
+          uploadedFiles={uploadedFiles}
+          savedConfigs={savedConfigs}
+          onManualChange={setYamlText}
+          onFilesAdded={handleFilesAdded}
+          onRemoveFile={handleRemoveFile}
+          onClearFiles={handleClearFiles}
+          onParse={handleParse}
+          onSaveConfig={handleSaveConfig}
+          onLoadConfig={handleLoadConfig}
+          onDeleteConfig={handleDeleteConfig}
+          warnings={warnings}
+        />
       </section>
 
       <section className="grid gap-6 lg:grid-cols-3">
