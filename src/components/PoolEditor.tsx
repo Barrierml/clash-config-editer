@@ -7,6 +7,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select } from './ui/select';
 import { Badge } from './ui/badge';
+import { useTranslation } from '../lib/i18n';
 
 interface PoolEditorProps {
   pools: ProxyPool[];
@@ -34,6 +35,7 @@ export function PoolEditor({
   onClearNodes
 }: PoolEditorProps) {
   const [creationMode, setCreationMode] = React.useState<'single' | 'per-selection'>('single');
+  const { t } = useTranslation();
 
   const handleCreate = () => {
     if (creationMode === 'per-selection') {
@@ -47,10 +49,8 @@ export function PoolEditor({
     <div className="space-y-4">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Proxy Pools</h2>
-          <p className="text-sm text-muted-foreground">
-            Create pools and assign nodes from your current selection.
-          </p>
+          <h2 className="text-lg font-semibold">{t('poolEditorTitle')}</h2>
+          <p className="text-sm text-muted-foreground">{t('poolEditorSubtitle')}</p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <Select
@@ -59,22 +59,22 @@ export function PoolEditor({
             aria-label="Pool creation mode"
             className="sm:w-64"
           >
-            <option value="single">Add an empty pool</option>
-            <option value="per-selection">Create a pool for each selected proxy</option>
+            <option value="single">{t('poolEditorAddEmpty')}</option>
+            <option value="per-selection">{t('poolEditorAddPerSelection')}</option>
           </Select>
           <Button
             type="button"
             onClick={handleCreate}
             disabled={creationMode === 'per-selection' && selectedNodes.length === 0}
           >
-            {creationMode === 'per-selection' ? 'Add from selection' : 'Add Pool'}
+            {creationMode === 'per-selection' ? t('poolEditorAddFromSelection') : t('poolEditorAddPool')}
           </Button>
         </div>
       </div>
 
       {pools.length === 0 && (
         <div className="rounded-lg border border-dashed border-border/60 p-6 text-center text-muted-foreground">
-          No pools yet. Create one and assign nodes using the checkbox selection above.
+          {t('poolEditorEmptyState')}
         </div>
       )}
 
@@ -83,7 +83,7 @@ export function PoolEditor({
           <Card key={pool.id} className="flex flex-col">
             <CardHeader className="pb-4">
               <CardTitle className="flex items-center justify-between text-base">
-                <span>{pool.name || 'Unnamed Pool'}</span>
+                <span>{pool.name || t('poolEditorUnnamed')}</span>
                 <div className="flex items-center gap-2">
                   <Button
                     type="button"
@@ -92,10 +92,10 @@ export function PoolEditor({
                     onClick={() => onClearNodes(pool.id)}
                     disabled={pool.proxies.length === 0}
                   >
-                    Clear nodes
+                    {t('poolEditorClearNodes')}
                   </Button>
                   <Button type="button" variant="ghost" size="sm" onClick={() => onDeletePool(pool.id)}>
-                    Remove
+                    {t('poolEditorRemovePool')}
                   </Button>
                 </div>
               </CardTitle>
@@ -103,15 +103,15 @@ export function PoolEditor({
             <CardContent className="flex flex-1 flex-col gap-4">
               <div className="grid grid-cols-1 gap-3">
                 <div className="space-y-1">
-                  <Label>Name</Label>
+                  <Label>{t('poolEditorNameLabel')}</Label>
                   <Input
                     value={pool.name}
-                    placeholder="Pool name"
+                    placeholder={t('poolEditorNamePlaceholder')}
                     onChange={(event) => onUpdatePool(pool.id, { name: event.target.value })}
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label>Strategy</Label>
+                  <Label>{t('poolEditorStrategyLabel')}</Label>
                   <Select
                     value={pool.strategy}
                     onChange={(event) =>
@@ -126,7 +126,7 @@ export function PoolEditor({
                   </Select>
                 </div>
                 <div className="space-y-1">
-                  <Label>Listener Port</Label>
+                  <Label>{t('poolEditorPortLabel')}</Label>
                   <Input
                     type="number"
                     min={1}
@@ -141,7 +141,9 @@ export function PoolEditor({
 
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">Nodes</Label>
+                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                    {t('poolEditorNodesLabel')}
+                  </Label>
                   <div className="flex items-center gap-2">
                     <Button
                       type="button"
@@ -150,7 +152,7 @@ export function PoolEditor({
                       disabled={selectedNodes.length === 0}
                       onClick={() => onAssignNodes(pool.id, selectedNodes)}
                     >
-                      Assign selected ({selectedNodes.length})
+                      {t('poolEditorAssignSelected', { count: selectedNodes.length })}
                     </Button>
                     <Button
                       type="button"
@@ -164,7 +166,7 @@ export function PoolEditor({
                         )
                       }
                     >
-                      Remove selected
+                      {t('poolEditorRemoveSelected')}
                     </Button>
                   </div>
                 </div>
@@ -176,14 +178,14 @@ export function PoolEditor({
                         type="button"
                         className="ml-1 text-xs text-muted-foreground hover:text-foreground"
                         onClick={() => onRemoveNode(pool.id, proxy)}
-                        aria-label={`Remove ${proxy}`}
+                        aria-label={t('poolEditorRemoveProxyAria', { name: proxy })}
                       >
                         ×
                       </button>
                     </Badge>
                   ))}
                   {pool.proxies.length === 0 && (
-                    <span className="text-xs text-muted-foreground">No nodes assigned yet.</span>
+                    <span className="text-xs text-muted-foreground">{t('poolEditorNoNodes')}</span>
                   )}
                 </div>
               </div>
