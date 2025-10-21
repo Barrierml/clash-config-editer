@@ -30,13 +30,24 @@ function getNextAvailablePort(usedPorts: Set<number>, start = BASE_POOL_PORT) {
   return candidate;
 }
 
-function ensureUniqueName(base: string, usedNames: Set<string>) {
-  if (!usedNames.has(base)) {
+function ensureUniqueName(
+  base: string,
+  usedNames: Set<string>,
+  forbiddenNames: Iterable<string> = []
+) {
+  const reserved = new Set(usedNames);
+  for (const name of forbiddenNames) {
+    if (name) {
+      reserved.add(name);
+    }
+  }
+
+  if (!reserved.has(base)) {
     return base;
   }
   let counter = 2;
   let candidate = `${base} (${counter})`;
-  while (usedNames.has(candidate)) {
+  while (reserved.has(candidate)) {
     counter += 1;
     candidate = `${base} (${counter})`;
   }
@@ -111,7 +122,11 @@ function ConfigGeneratorApp(): JSX.Element {
     setPools((prev) => {
       const usedPorts = new Set(prev.map((pool) => pool.port));
       const usedNames = new Set(prev.map((pool) => pool.name));
-      const name = ensureUniqueName(`Pool ${prev.length + 1}`, usedNames);
+      const name = ensureUniqueName(
+        `Pool ${prev.length + 1}`,
+        usedNames,
+        nodes.map((node) => node.name)
+      );
       const port = getNextAvailablePort(usedPorts);
       return [
         ...prev,
@@ -133,11 +148,12 @@ function ConfigGeneratorApp(): JSX.Element {
 
       const usedPorts = new Set(prev.map((pool) => pool.port));
       const usedNames = new Set(prev.map((pool) => pool.name));
+      const nodeNames = nodes.map((node) => node.name);
       const nextPools = [...prev];
       let searchStart = BASE_POOL_PORT;
 
       for (const proxyName of selected) {
-        const name = ensureUniqueName(proxyName, usedNames);
+        const name = ensureUniqueName(proxyName, usedNames, nodeNames);
         const port = getNextAvailablePort(usedPorts, searchStart);
         usedNames.add(name);
         usedPorts.add(port);
@@ -156,9 +172,23 @@ function ConfigGeneratorApp(): JSX.Element {
   };
 
   const updatePool = (id: string, patch: Partial<ProxyPool>) => {
-    setPools((prev) =>
-      prev.map((pool) => (pool.id === id ? { ...pool, ...patch, proxies: pool.proxies } : pool))
-    );
+    setPools((prev) => {
+      const usedNames = new Set(prev.filter((pool) => pool.id !== id).map((pool) => pool.name));
+      const nodeNames = nodes.map((node) => node.name);
+
+      return prev.map((pool) => {
+        if (pool.id !== id) {
+          return pool;
+        }
+
+        const nextPatch =
+          typeof patch.name === 'string'
+            ? { ...patch, name: ensureUniqueName(patch.name, usedNames, nodeNames) }
+            : patch;
+
+        return { ...pool, ...nextPatch, proxies: pool.proxies };
+      });
+    });
   };
 
   const deletePool = (id: string) => {
