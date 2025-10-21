@@ -1,0 +1,273 @@
+import * as React from 'react';
+import { FileUpload } from './components/FileUpload';
+import { NodeTable } from './components/NodeTable';
+import { PoolEditor } from './components/PoolEditor';
+import { ConfigPreview } from './components/ConfigPreview';
+import { Card, CardContent, CardHeader, CardTitle } from './components/ui/card';
+import { Input } from './components/ui/input';
+import { Label } from './components/ui/label';
+import { Select } from './components/ui/select';
+import type { AppSettings, ProxyNode, ProxyPool } from './types';
+import { DEFAULT_SETTINGS, generateConfigYaml, persistState, readState } from './lib/utils';
+import { parseClashConfig } from './lib/parser';
+
+const POOL_STORAGE_KEY = 'ccg:pools';
+const SETTINGS_STORAGE_KEY = 'ccg:settings';
+
+function generateId() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+  return `pool-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function createPoolTemplate(index: number): ProxyPool {
+  return {
+    id: generateId(),
+    name: `Pool ${index + 1}`,
+    strategy: 'random',
+    port: 7890 + index,
+    proxies: []
+  };
+}
+
+function ConfigGeneratorApp(): JSX.Element {
+  const [yamlText, setYamlText] = React.useState('');
+  const [nodes, setNodes] = React.useState<ProxyNode[]>([]);
+  const [warnings, setWarnings] = React.useState<string[]>([]);
+  const [selectedNodes, setSelectedNodes] = React.useState<Set<string>>(new Set());
+  const [pools, setPools] = React.useState<ProxyPool[]>([]);
+  const [settings, setSettings] = React.useState<AppSettings>(DEFAULT_SETTINGS);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setPools(readState<ProxyPool[]>(POOL_STORAGE_KEY, []));
+    setSettings(readState<AppSettings>(SETTINGS_STORAGE_KEY, DEFAULT_SETTINGS));
+  }, []);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    persistState(POOL_STORAGE_KEY, pools);
+  }, [pools]);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    persistState(SETTINGS_STORAGE_KEY, settings);
+  }, [settings]);
+
+  const handleParse = React.useCallback(() => {
+    if (!yamlText.trim()) {
+      setWarnings(['Please provide YAML content first.']);
+      setNodes([]);
+      setSelectedNodes(new Set());
+      return;
+    }
+    const result = parseClashConfig(yamlText);
+    setNodes(result.nodes);
+    setWarnings(result.warnings);
+    setSelectedNodes(new Set());
+  }, [yamlText]);
+
+  const toggleNode = (name: string) => {
+    setSelectedNodes((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) {
+        next.delete(name);
+      } else {
+        next.add(name);
+      }
+      return next;
+    });
+  };
+
+  const selectMany = (names: string[], select = true) => {
+    setSelectedNodes((prev) => {
+      const next = new Set(prev);
+      for (const name of names) {
+        if (select) {
+          next.add(name);
+        } else {
+          next.delete(name);
+        }
+      }
+      return next;
+    });
+  };
+
+  const createPool = () => {
+    setPools((prev) => [...prev, createPoolTemplate(prev.length)]);
+  };
+
+  const updatePool = (id: string, patch: Partial<ProxyPool>) => {
+    setPools((prev) =>
+      prev.map((pool) => (pool.id === id ? { ...pool, ...patch, proxies: pool.proxies } : pool))
+    );
+  };
+
+  const deletePool = (id: string) => {
+    setPools((prev) => prev.filter((pool) => pool.id !== id));
+  };
+
+  const assignNodes = (id: string, nodesToAssign: string[]) => {
+    if (nodesToAssign.length === 0) return;
+    setPools((prev) =>
+      prev.map((pool) =>
+        pool.id === id
+          ? {
+              ...pool,
+              proxies: Array.from(new Set([...pool.proxies, ...nodesToAssign]))
+            }
+          : pool
+      )
+    );
+  };
+
+  const removeNode = (id: string, nodeName: string) => {
+    setPools((prev) =>
+      prev.map((pool) =>
+        pool.id === id ? { ...pool, proxies: pool.proxies.filter((proxy) => proxy !== nodeName) } : pool
+      )
+    );
+  };
+
+  const updateSettings = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
+    setSettings((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const generatedYaml = React.useMemo(() => {
+    if (nodes.length === 0) return '';
+    return generateConfigYaml(settings, pools, nodes);
+  }, [nodes, pools, settings]);
+
+  const handleCopy = async () => {
+    if (!generatedYaml) return;
+    try {
+      await navigator.clipboard.writeText(generatedYaml);
+    } catch (error) {
+      console.error('Failed to copy YAML', error);
+    }
+  };
+
+  const handleDownload = () => {
+    if (!generatedYaml) return;
+    const blob = new Blob([generatedYaml], { type: 'text/yaml' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'config.yaml';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <main className="mx-auto flex min-h-screen max-w-6xl flex-col gap-8 px-4 py-10">
+      <header className="flex flex-col gap-2 text-center">
+        <h1 className="text-3xl font-bold">Clash Configuration Generator</h1>
+        <p className="text-sm text-muted-foreground">
+          Parse your Clash configuration, craft load-balanced pools, and export a ready-to-run Clash.Meta config.
+        </p>
+      </header>
+
+      <section>
+        <FileUpload value={yamlText} onChange={setYamlText} onParse={handleParse} warnings={warnings} />
+      </section>
+
+      <section className="grid gap-6 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Nodes</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <NodeTable
+              nodes={nodes}
+              selected={selectedNodes}
+              onToggle={toggleNode}
+              onSelectMany={(names, select) => selectMany(names, select)}
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Runtime Settings</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-1">
+              <Label htmlFor="controller-port">Controller Port</Label>
+              <Input
+                id="controller-port"
+                type="number"
+                min={1}
+                max={65535}
+                value={settings.controllerPort}
+                onChange={(event) => updateSettings('controllerPort', Number(event.target.value) || 9090)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="secret">Secret</Label>
+              <Input
+                id="secret"
+                value={settings.secret}
+                placeholder="Optional secret"
+                onChange={(event) => updateSettings('secret', event.target.value)}
+              />
+            </div>
+            <div className="flex items-center justify-between rounded-lg border border-border/60 bg-secondary/30 p-3">
+              <div>
+                <p className="text-sm font-medium">Allow LAN</p>
+                <p className="text-xs text-muted-foreground">Expose the proxy to your local network.</p>
+              </div>
+              <label className="inline-flex cursor-pointer items-center gap-2">
+                <span className="text-xs text-muted-foreground">{settings.allowLan ? 'On' : 'Off'}</span>
+                <input
+                  type="checkbox"
+                  className="h-5 w-5"
+                  checked={settings.allowLan}
+                  onChange={(event) => updateSettings('allowLan', event.target.checked)}
+                />
+              </label>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="log-level">Log Level</Label>
+              <Select
+                id="log-level"
+                value={settings.logLevel}
+                onChange={(event) => updateSettings('logLevel', event.target.value as AppSettings['logLevel'])}
+              >
+                <option value="info">info</option>
+                <option value="warning">warning</option>
+                <option value="error">error</option>
+                <option value="debug">debug</option>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section>
+        <PoolEditor
+          pools={pools}
+          selectedNodes={Array.from(selectedNodes)}
+          onCreatePool={createPool}
+          onUpdatePool={updatePool}
+          onDeletePool={deletePool}
+          onAssignNodes={assignNodes}
+          onRemoveNode={removeNode}
+        />
+      </section>
+
+      <section>
+        <ConfigPreview
+          yaml={generatedYaml}
+          onCopy={handleCopy}
+          onDownload={handleDownload}
+          disabled={nodes.length === 0}
+        />
+      </section>
+    </main>
+  );
+}
+
+export default ConfigGeneratorApp;
