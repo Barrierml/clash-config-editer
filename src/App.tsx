@@ -21,6 +21,7 @@ import { parseClashConfig } from './lib/parser';
 const POOL_STORAGE_KEY = 'ccg:pools';
 const SETTINGS_STORAGE_KEY = 'ccg:settings';
 const SAVED_CONFIGS_STORAGE_KEY = 'ccg:saved-configs';
+const LAST_SOURCES_STORAGE_KEY = 'ccg:last-sources';
 const BASE_POOL_PORT = 7890;
 
 function sanitizePool(pool: ProxyPool): ProxyPool {
@@ -78,36 +79,7 @@ function ConfigGeneratorApp(): JSX.Element {
   const [settings, setSettings] = React.useState<AppSettings>(DEFAULT_SETTINGS);
   const [uploadedFiles, setUploadedFiles] = React.useState<UploadedConfigSource[]>([]);
   const [savedConfigs, setSavedConfigs] = React.useState<SavedConfig[]>([]);
-
-  React.useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const restoredPools = readState<ProxyPool[]>(POOL_STORAGE_KEY, []).map(sanitizePool);
-    setPools(restoredPools);
-    const restoredSettings = readState<AppSettings>(SETTINGS_STORAGE_KEY, DEFAULT_SETTINGS);
-    setSettings({ ...DEFAULT_SETTINGS, ...restoredSettings });
-    const restoredConfigs = readState<SavedConfig[]>(SAVED_CONFIGS_STORAGE_KEY, []).map((config) => ({
-      ...config,
-      files: Array.isArray(config.files)
-        ? config.files.map((file) => ({ ...file, id: file.id ?? generateId() }))
-        : []
-    }));
-    setSavedConfigs(restoredConfigs);
-  }, []);
-
-  React.useEffect(() => {
-    if (typeof window === 'undefined') return;
-    persistState(POOL_STORAGE_KEY, pools);
-  }, [pools]);
-
-  React.useEffect(() => {
-    if (typeof window === 'undefined') return;
-    persistState(SETTINGS_STORAGE_KEY, settings);
-  }, [settings]);
-
-  React.useEffect(() => {
-    if (typeof window === 'undefined') return;
-    persistState(SAVED_CONFIGS_STORAGE_KEY, savedConfigs);
-  }, [savedConfigs]);
+  const hasRestoredSources = React.useRef(false);
 
   const parseSources = React.useCallback(
     (manual: string, files: UploadedConfigSource[]) => {
@@ -151,17 +123,99 @@ function ConfigGeneratorApp(): JSX.Element {
     [setNodes, setSelectedNodes, setWarnings]
   );
 
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const restoredPools = readState<ProxyPool[]>(POOL_STORAGE_KEY, []).map(sanitizePool);
+    setPools(restoredPools);
+    const restoredSettings = readState<AppSettings>(SETTINGS_STORAGE_KEY, DEFAULT_SETTINGS);
+    setSettings({ ...DEFAULT_SETTINGS, ...restoredSettings });
+    const restoredConfigs = readState<SavedConfig[]>(SAVED_CONFIGS_STORAGE_KEY, []).map((config) => ({
+      ...config,
+      files: Array.isArray(config.files)
+        ? config.files.map((file) => ({ ...file, id: file.id ?? generateId() }))
+        : []
+    }));
+    setSavedConfigs(restoredConfigs);
+  }, []);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const restored = readState<
+      | {
+          manualText?: unknown;
+          files?: unknown;
+        }
+      | null
+    >(LAST_SOURCES_STORAGE_KEY, null);
+
+    if (restored) {
+      const manual = typeof restored.manualText === 'string' ? restored.manualText : '';
+      const files = Array.isArray(restored.files)
+        ? restored.files
+            .map((file) => {
+              if (!file || typeof file !== 'object') return undefined;
+              const source = file as Partial<UploadedConfigSource> & {
+                name?: unknown;
+                content?: unknown;
+                id?: unknown;
+              };
+              if (typeof source.content !== 'string' || typeof source.name !== 'string') {
+                return undefined;
+              }
+              return {
+                id: typeof source.id === 'string' ? source.id : generateId(),
+                name: source.name,
+                content: source.content
+              } satisfies UploadedConfigSource;
+            })
+            .filter((file): file is UploadedConfigSource => Boolean(file))
+        : [];
+
+      setYamlText(manual);
+      setUploadedFiles(files);
+      if (manual.trim().length > 0 || files.length > 0) {
+        parseSources(manual, files);
+      }
+    }
+
+    hasRestoredSources.current = true;
+  }, [parseSources]);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    persistState(POOL_STORAGE_KEY, pools);
+  }, [pools]);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    persistState(SETTINGS_STORAGE_KEY, settings);
+  }, [settings]);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    persistState(SAVED_CONFIGS_STORAGE_KEY, savedConfigs);
+  }, [savedConfigs]);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined' || !hasRestoredSources.current) return;
+    persistState(LAST_SOURCES_STORAGE_KEY, {
+      manualText: yamlText,
+      files: uploadedFiles
+    });
+  }, [uploadedFiles, yamlText]);
+
   const handleParse = React.useCallback(() => {
     parseSources(yamlText, uploadedFiles);
   }, [parseSources, uploadedFiles, yamlText]);
 
-  const toggleNode = React.useCallback((name: string) => {
+  const toggleNode = React.useCallback((name: string, nextSelected?: boolean) => {
     setSelectedNodes((prev) => {
       const next = new Set(prev);
-      if (next.has(name)) {
-        next.delete(name);
-      } else {
+      const shouldSelect = typeof nextSelected === 'boolean' ? nextSelected : !next.has(name);
+      if (shouldSelect) {
         next.add(name);
+      } else {
+        next.delete(name);
       }
       return next;
     });

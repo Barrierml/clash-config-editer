@@ -5,15 +5,29 @@ import { Input } from './ui/input';
 
 interface NodeRowProps {
   node: ProxyNode;
+  index: number;
   isSelected: boolean;
-  onToggle: (name: string) => void;
+  onToggle: (index: number, name: string, nextSelected: boolean, modifiers: { shiftKey?: boolean }) => void;
 }
 
 const NodeRow = React.memo(
-  function NodeRow({ node, isSelected, onToggle }: NodeRowProps) {
-    const handleToggle = React.useCallback(() => {
-      onToggle(node.name);
-    }, [node.name, onToggle]);
+  function NodeRow({ node, index, isSelected, onToggle }: NodeRowProps) {
+    const handleRowClick = React.useCallback(
+      (event: React.MouseEvent<HTMLTableRowElement>) => {
+        onToggle(index, node.name, !isSelected, { shiftKey: event.shiftKey });
+      },
+      [index, isSelected, node.name, onToggle]
+    );
+
+    const handleCheckboxChange = React.useCallback(
+      (event: React.ChangeEvent<HTMLInputElement>) => {
+        const nativeEvent = event.nativeEvent as MouseEvent | KeyboardEvent;
+        onToggle(index, node.name, event.target.checked, {
+          shiftKey: Boolean(nativeEvent?.shiftKey)
+        });
+      },
+      [index, node.name, onToggle]
+    );
 
     const handleCheckboxClick = React.useCallback((event: React.MouseEvent<HTMLInputElement>) => {
       event.stopPropagation();
@@ -22,14 +36,14 @@ const NodeRow = React.memo(
     return (
       <tr
         className={`${isSelected ? 'bg-primary/10' : 'hover:bg-secondary/40'} cursor-pointer`}
-        onClick={handleToggle}
+        onClick={handleRowClick}
       >
         <td className="px-4 py-2">
           <input
             type="checkbox"
             className="h-4 w-4 rounded border-border"
             checked={isSelected}
-            onChange={handleToggle}
+            onChange={handleCheckboxChange}
             onClick={handleCheckboxClick}
           />
         </td>
@@ -45,13 +59,17 @@ const NodeRow = React.memo(
       </tr>
     );
   },
-  (prev, next) => prev.isSelected === next.isSelected && prev.node === next.node && prev.onToggle === next.onToggle
+  (prev, next) =>
+    prev.index === next.index &&
+    prev.isSelected === next.isSelected &&
+    prev.node === next.node &&
+    prev.onToggle === next.onToggle
 );
 
 interface NodeTableProps {
   nodes: ProxyNode[];
   selected: Set<string>;
-  onToggle: (name: string) => void;
+  onToggle: (name: string, nextSelected?: boolean) => void;
   onSelectMany: (names: string[], append?: boolean) => void;
 }
 
@@ -59,6 +77,7 @@ export function NodeTable({ nodes, selected, onToggle, onSelectMany }: NodeTable
   const [search, setSearch] = React.useState('');
   const deferredSearch = React.useDeferredValue(search);
   const headerCheckboxRef = React.useRef<HTMLInputElement>(null);
+  const lastInteractedIndex = React.useRef<number | null>(null);
 
   const filtered = React.useMemo(() => {
     const keyword = deferredSearch.trim().toLowerCase();
@@ -80,6 +99,27 @@ export function NodeTable({ nodes, selected, onToggle, onSelectMany }: NodeTable
     if (!headerCheckboxRef.current) return;
     headerCheckboxRef.current.indeterminate = hasSomeSelected && !isAllSelected;
   }, [hasSomeSelected, isAllSelected]);
+
+  const handleRowToggle = React.useCallback(
+    (
+      index: number,
+      name: string,
+      nextSelected: boolean,
+      modifiers: { shiftKey?: boolean }
+    ) => {
+      if (modifiers.shiftKey && lastInteractedIndex.current !== null && filtered.length > 0) {
+        const start = Math.min(index, lastInteractedIndex.current);
+        const end = Math.max(index, lastInteractedIndex.current);
+        const rangeNames = filtered.slice(start, end + 1).map((node) => node.name);
+        onSelectMany(rangeNames, nextSelected);
+      } else {
+        onToggle(name, nextSelected);
+      }
+
+      lastInteractedIndex.current = index;
+    },
+    [filtered, onSelectMany, onToggle]
+  );
 
   return (
     <div className="space-y-3">
@@ -147,8 +187,14 @@ export function NodeTable({ nodes, selected, onToggle, onSelectMany }: NodeTable
             </tr>
           </thead>
           <tbody className="divide-y divide-border/40">
-            {filtered.map((node) => (
-              <NodeRow key={node.name} node={node} isSelected={selected.has(node.name)} onToggle={onToggle} />
+            {filtered.map((node, index) => (
+              <NodeRow
+                key={node.name}
+                node={node}
+                index={index}
+                isSelected={selected.has(node.name)}
+                onToggle={handleRowToggle}
+              />
             ))}
             {filtered.length === 0 && (
               <tr>
