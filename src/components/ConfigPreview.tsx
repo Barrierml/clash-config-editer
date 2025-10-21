@@ -2,6 +2,7 @@ import * as React from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Button } from './ui/button';
+import { useTranslation } from '../lib/i18n';
 
 interface ConfigPreviewProps {
   yaml: string;
@@ -11,19 +12,20 @@ interface ConfigPreviewProps {
 }
 
 export function ConfigPreview({ yaml, onCopy, onDownload, disabled }: ConfigPreviewProps) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-3">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Generated config.yaml</h2>
-          <p className="text-sm text-muted-foreground">Preview the output before downloading.</p>
+          <h2 className="text-lg font-semibold">{t('configPreviewTitle')}</h2>
+          <p className="text-sm text-muted-foreground">{t('configPreviewSubtitle')}</p>
         </div>
         <div className="flex gap-2">
           <Button type="button" variant="outline" onClick={onCopy} disabled={disabled}>
-            Copy YAML
+            {t('configPreviewCopy')}
           </Button>
           <Button type="button" onClick={onDownload} disabled={disabled}>
-            ⚙️ Generate config.yaml
+            {t('configPreviewGenerate')}
           </Button>
         </div>
       </div>
@@ -37,7 +39,7 @@ export function ConfigPreview({ yaml, onCopy, onDownload, disabled }: ConfigPrev
             {yaml}
           </SyntaxHighlighter>
         ) : (
-          <div className="p-6 text-sm text-muted-foreground">Generate a configuration to preview it here.</div>
+          <div className="p-6 text-sm text-muted-foreground">{t('configPreviewEmpty')}</div>
         )}
       </div>
     </div>

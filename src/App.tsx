@@ -7,14 +7,17 @@ import { Card, CardContent, CardHeader, CardTitle } from './components/ui/card';
 import { Input } from './components/ui/input';
 import { Label } from './components/ui/label';
 import { Select } from './components/ui/select';
+import { LOAD_BALANCE_STRATEGIES, normalizeStrategy } from './types';
 import type {
   AppSettings,
   ProxyNode,
   ProxyPool,
   SavedConfig,
-  UploadedConfigSource
+  UploadedConfigSource,
+  WarningMessage
 } from './types';
-import { LOAD_BALANCE_STRATEGIES, normalizeStrategy } from './types';
+import { useTranslation } from './lib/i18n';
+import type { Language, TranslationKey } from './lib/i18n';
 import { DEFAULT_SETTINGS, dedupeNodes, generateConfigYaml, persistState, readState } from './lib/utils';
 import { parseClashConfig } from './lib/parser';
 
@@ -70,10 +73,38 @@ function ensureUniqueName(
   return candidate;
 }
 
+function mapParserWarning(warning: string): WarningMessage {
+  if (warning === 'YAML did not produce an object.') {
+    return { key: 'parserYamlNotObject', fallback: warning };
+  }
+
+  if (warning === 'No proxies were found in the provided configuration.') {
+    return { key: 'parserNoProxiesFound', fallback: warning };
+  }
+
+  if (warning === 'Unknown parsing error') {
+    return { key: 'parserUnknownError', fallback: warning };
+  }
+
+  const providerMatch = warning.match(
+    /^Provider "(.+)" has no inline proxies\. Remote providers are not imported\.$/
+  );
+  if (providerMatch) {
+    return {
+      key: 'parserProviderNoInline',
+      params: { name: providerMatch[1] },
+      fallback: warning
+    };
+  }
+
+  return { fallback: warning };
+}
+
 function ConfigGeneratorApp(): JSX.Element {
+  const { t, language, setLanguage } = useTranslation();
   const [yamlText, setYamlText] = React.useState('');
   const [nodes, setNodes] = React.useState<ProxyNode[]>([]);
-  const [warnings, setWarnings] = React.useState<string[]>([]);
+  const [warnings, setWarnings] = React.useState<WarningMessage[]>([]);
   const [selectedNodes, setSelectedNodes] = React.useState<Set<string>>(new Set());
   const [pools, setPools] = React.useState<ProxyPool[]>([]);
   const [settings, setSettings] = React.useState<AppSettings>(DEFAULT_SETTINGS);
@@ -83,9 +114,9 @@ function ConfigGeneratorApp(): JSX.Element {
 
   const parseSources = React.useCallback(
     (manual: string, files: UploadedConfigSource[]) => {
-      const sources: Array<{ label?: string; text: string }> = [];
+      const sources: Array<{ label?: string; labelKey?: TranslationKey; text: string }> = [];
       if (manual.trim()) {
-        sources.push({ label: 'Pasted YAML', text: manual });
+        sources.push({ labelKey: 'manualSourceLabel', text: manual });
       }
       for (const file of files) {
         if (file.content.trim()) {
@@ -95,25 +126,30 @@ function ConfigGeneratorApp(): JSX.Element {
 
       if (sources.length === 0) {
         setNodes([]);
-        setWarnings(['Please provide YAML content first.']);
+        setWarnings([{ key: 'parseNoSourcesWarning' }]);
         setSelectedNodes(new Set());
         return;
       }
 
       const aggregatedNodes: ProxyNode[] = [];
-      const aggregatedWarnings: string[] = [];
+      const aggregatedWarnings: WarningMessage[] = [];
 
       for (const source of sources) {
         const result = parseClashConfig(source.text);
         aggregatedNodes.push(...result.nodes);
-        const prefix = source.label ? `${source.label}: ` : '';
-        aggregatedWarnings.push(...result.warnings.map((warning) => `${prefix}${warning}`));
+        aggregatedWarnings.push(
+          ...result.warnings.map((warning) => ({
+            ...mapParserWarning(warning),
+            prefix: source.label,
+            prefixKey: source.labelKey
+          }))
+        );
       }
 
       const deduped = dedupeNodes(aggregatedNodes);
 
       if (deduped.length === 0 && aggregatedWarnings.length === 0) {
-        aggregatedWarnings.push('No proxies were found across the provided configurations.');
+        aggregatedWarnings.push({ key: 'parseNoProxiesWarning' });
       }
 
       setNodes(deduped);
@@ -321,7 +357,7 @@ function ConfigGeneratorApp(): JSX.Element {
       const usedPorts = new Set(prev.map((pool) => pool.port));
       const usedNames = new Set(prev.map((pool) => pool.name));
       const name = ensureUniqueName(
-        `Pool ${prev.length + 1}`,
+        t('poolDefaultName', { index: prev.length + 1 }),
         usedNames,
         nodes.map((node) => node.name)
       );
@@ -468,11 +504,25 @@ function ConfigGeneratorApp(): JSX.Element {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-6xl flex-col gap-8 px-4 py-10">
-      <header className="flex flex-col gap-2 text-center">
-        <h1 className="text-3xl font-bold">Clash Configuration Generator</h1>
-        <p className="text-sm text-muted-foreground">
-          Parse your Clash configuration, craft load-balanced pools, and export a ready-to-run Clash.Meta config.
-        </p>
+      <header className="flex flex-col gap-4 text-center md:flex-row md:items-start md:justify-between md:text-left">
+        <div className="space-y-2">
+          <h1 className="text-3xl font-bold">{t('appTitle')}</h1>
+          <p className="text-sm text-muted-foreground">{t('appSubtitle')}</p>
+        </div>
+        <div className="flex flex-col items-center gap-1 md:items-end">
+          <Label htmlFor="language-select" className="text-sm font-medium">
+            {t('languageLabel')}
+          </Label>
+          <Select
+            id="language-select"
+            value={language}
+            onChange={(event) => setLanguage(event.target.value as Language)}
+            className="w-40"
+          >
+            <option value="en">{t('languageEnglish')}</option>
+            <option value="zh">{t('languageChinese')}</option>
+          </Select>
+        </div>
       </header>
 
       <section>
@@ -496,7 +546,7 @@ function ConfigGeneratorApp(): JSX.Element {
       <section className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Nodes</CardTitle>
+            <CardTitle>{t('nodesCardTitle')}</CardTitle>
           </CardHeader>
           <CardContent>
             <NodeTable
@@ -510,11 +560,11 @@ function ConfigGeneratorApp(): JSX.Element {
 
         <Card>
           <CardHeader>
-            <CardTitle>Runtime Settings</CardTitle>
+            <CardTitle>{t('runtimeSettingsCardTitle')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-1">
-              <Label htmlFor="controller-port">Controller Port</Label>
+              <Label htmlFor="controller-port">{t('controllerPortLabel')}</Label>
               <Input
                 id="controller-port"
                 type="number"
@@ -525,16 +575,16 @@ function ConfigGeneratorApp(): JSX.Element {
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="secret">Secret</Label>
+              <Label htmlFor="secret">{t('secretLabel')}</Label>
               <Input
                 id="secret"
                 value={settings.secret}
-                placeholder="Optional secret"
+                placeholder={t('secretPlaceholder')}
                 onChange={(event) => updateSettings('secret', event.target.value)}
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="proxy-export-mode">Proxy Export</Label>
+              <Label htmlFor="proxy-export-mode">{t('proxyExportLabel')}</Label>
               <Select
                 id="proxy-export-mode"
                 value={settings.proxyExportMode}
@@ -542,20 +592,20 @@ function ConfigGeneratorApp(): JSX.Element {
                   updateSettings('proxyExportMode', event.target.value as AppSettings['proxyExportMode'])
                 }
               >
-                <option value="all">Include all proxies</option>
-                <option value="selected">Only selected proxies</option>
+                <option value="all">{t('proxyExportAll')}</option>
+                <option value="selected">{t('proxyExportSelected')}</option>
               </Select>
-              <p className="text-xs text-muted-foreground">
-                Choose whether to export every proxy or just the ones currently selected above.
-              </p>
+              <p className="text-xs text-muted-foreground">{t('proxyExportHelp')}</p>
             </div>
             <div className="flex items-center justify-between rounded-lg border border-border/60 bg-secondary/30 p-3">
               <div>
-                <p className="text-sm font-medium">Allow LAN</p>
-                <p className="text-xs text-muted-foreground">Expose the proxy to your local network.</p>
+                <p className="text-sm font-medium">{t('allowLanLabel')}</p>
+                <p className="text-xs text-muted-foreground">{t('allowLanHelp')}</p>
               </div>
               <label className="inline-flex cursor-pointer items-center gap-2">
-                <span className="text-xs text-muted-foreground">{settings.allowLan ? 'On' : 'Off'}</span>
+                <span className="text-xs text-muted-foreground">
+                  {settings.allowLan ? t('toggleOn') : t('toggleOff')}
+                </span>
                 <input
                   type="checkbox"
                   className="h-5 w-5"
@@ -565,16 +615,16 @@ function ConfigGeneratorApp(): JSX.Element {
               </label>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="log-level">Log Level</Label>
+              <Label htmlFor="log-level">{t('logLevelLabel')}</Label>
               <Select
                 id="log-level"
                 value={settings.logLevel}
                 onChange={(event) => updateSettings('logLevel', event.target.value as AppSettings['logLevel'])}
               >
-                <option value="info">info</option>
-                <option value="warning">warning</option>
-                <option value="error">error</option>
-                <option value="debug">debug</option>
+                <option value="info">{t('logLevelInfo')}</option>
+                <option value="warning">{t('logLevelWarning')}</option>
+                <option value="error">{t('logLevelError')}</option>
+                <option value="debug">{t('logLevelDebug')}</option>
               </Select>
             </div>
           </CardContent>

@@ -1,3 +1,5 @@
+import type { TranslationKey } from './lib/i18n';
+
 export interface ProxyNode {
   name: string;
   type?: string;
@@ -52,4 +54,12 @@ export interface SavedConfig {
   manualText: string;
   files: UploadedConfigSource[];
   createdAt: number;
+}
+
+export interface WarningMessage {
+  key?: TranslationKey;
+  fallback?: string;
+  params?: Record<string, string | number>;
+  prefix?: string;
+  prefixKey?: TranslationKey;
 }

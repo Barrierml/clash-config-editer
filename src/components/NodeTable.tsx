@@ -2,6 +2,7 @@ import * as React from 'react';
 import type { ProxyNode } from '../types';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
+import { useTranslation } from '../lib/i18n';
 
 interface NodeRowProps {
   node: ProxyNode;
@@ -78,6 +79,7 @@ export function NodeTable({ nodes, selected, onToggle, onSelectMany }: NodeTable
   const deferredSearch = React.useDeferredValue(search);
   const headerCheckboxRef = React.useRef<HTMLInputElement>(null);
   const lastInteractedIndex = React.useRef<number | null>(null);
+  const { t } = useTranslation();
 
   const filtered = React.useMemo(() => {
     const keyword = deferredSearch.trim().toLowerCase();
@@ -125,11 +127,11 @@ export function NodeTable({ nodes, selected, onToggle, onSelectMany }: NodeTable
     <div className="space-y-3">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <p className="text-sm text-muted-foreground">
-          {filtered.length} nodes · {selected.size} selected
+          {t('nodeTableSummary', { filtered: filtered.length, selected: selected.size })}
         </p>
         <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
           <Input
-            placeholder="Search nodes..."
+            placeholder={t('nodeTableSearchPlaceholder')}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             className="sm:w-64"
@@ -141,7 +143,7 @@ export function NodeTable({ nodes, selected, onToggle, onSelectMany }: NodeTable
               onClick={() => onSelectMany(allNodeNames, true)}
               disabled={nodes.length === 0}
             >
-              Select all
+              {t('nodeTableSelectAll')}
             </Button>
             <Button
               type="button"
@@ -151,7 +153,7 @@ export function NodeTable({ nodes, selected, onToggle, onSelectMany }: NodeTable
               }
               disabled={filtered.length === 0}
             >
-              {isAllSelected ? 'Unselect filtered' : 'Select filtered'}
+              {isAllSelected ? t('nodeTableUnselectFiltered') : t('nodeTableSelectFiltered')}
             </Button>
             <Button
               type="button"
@@ -159,7 +161,7 @@ export function NodeTable({ nodes, selected, onToggle, onSelectMany }: NodeTable
               onClick={() => onSelectMany(Array.from(selected), false)}
               disabled={selected.size === 0}
             >
-              Clear selection
+              {t('nodeTableClearSelection')}
             </Button>
           </div>
         </div>
@@ -177,13 +179,13 @@ export function NodeTable({ nodes, selected, onToggle, onSelectMany }: NodeTable
                   onChange={(event) =>
                     onSelectMany(filteredNames, event.target.checked)
                   }
-                  aria-label="Toggle selection for filtered nodes"
+                  aria-label={t('nodeTableToggleFilteredAria')}
                 />
               </th>
-              <th className="px-4 py-3 font-medium">Name</th>
-              <th className="px-4 py-3 font-medium">Type</th>
-              <th className="px-4 py-3 font-medium">Server</th>
-              <th className="px-4 py-3 font-medium">Port</th>
+              <th className="px-4 py-3 font-medium">{t('nodeTableName')}</th>
+              <th className="px-4 py-3 font-medium">{t('nodeTableType')}</th>
+              <th className="px-4 py-3 font-medium">{t('nodeTableServer')}</th>
+              <th className="px-4 py-3 font-medium">{t('nodeTablePort')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/40">
@@ -199,7 +201,7 @@ export function NodeTable({ nodes, selected, onToggle, onSelectMany }: NodeTable
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-6 text-center text-muted-foreground">
-                  No nodes match your search.
+                  {t('nodeTableNoResults')}
                 </td>
               </tr>
             )}
