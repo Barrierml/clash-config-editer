@@ -3,9 +3,9 @@
 ## 快速开始 / Quick Start
 1. **准备 YAML 配置 / Prepare YAML Config**  
    在您的电脑上找到需要解析的 Clash/Clash.Meta 配置文件，并复制其中的 YAML 文本。
-2. **上传或粘贴配置 / Upload or Paste**  
-   打开应用后，在页面顶部的 *YAML Input* 区域中粘贴文本，或直接拖拽配置文件到上传框。
-3. **解析配置 / Parse Config**  
+2. **上传或粘贴配置 / Upload or Paste**
+   打开应用后，在页面顶部的 *YAML Input* 区域中粘贴文本，或直接拖拽一个或多个配置文件到上传框。
+3. **解析配置 / Parse Config**
    点击 **Parse YAML** 按钮。应用会读取所有代理节点，并在左侧的 *Nodes* 表格中展示它们。
 
 ## 节点管理 / Managing Nodes
@@ -29,6 +29,11 @@
 1. **预览 / Preview**：在页面底部的 *Generated YAML* 区域查看生成的配置。
 2. **复制 / Copy**：点击 **Copy YAML** 将结果复制到剪贴板。
 3. **下载 / Download**：点击 **Download config.yaml** 保存文件。
+
+## 浏览器预设 / Saved Presets
+- **保存来源 / Save Sources**：在 *Save current sources* 区域输入名称并点击 **Save**，即可将当前的粘贴内容与上传文件组合保存到浏览器。
+- **加载 / Load**：使用 **Load** 按钮快速恢复之前保存的来源，并立即重新解析所有节点。
+- **删除 / Delete**：若某个预设不再需要，可点击 **Delete** 将其移除。
 
 ## 常见问题 / FAQ
 - **解析失败 / Parsing Errors**：请确认原始 YAML 无语法错误，必要时先使用外部工具校验。

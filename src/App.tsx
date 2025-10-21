@@ -209,6 +209,11 @@ function ConfigGeneratorApp(): JSX.Element {
     [parseSources, yamlText]
   );
 
+  const handleClearManual = React.useCallback(() => {
+    setYamlText('');
+    parseSources('', uploadedFiles);
+  }, [parseSources, uploadedFiles]);
+
   const handleClearFiles = React.useCallback(() => {
     setUploadedFiles([]);
     parseSources(yamlText, []);
@@ -424,6 +429,7 @@ function ConfigGeneratorApp(): JSX.Element {
           onManualChange={setYamlText}
           onFilesAdded={handleFilesAdded}
           onRemoveFile={handleRemoveFile}
+          onClearManual={handleClearManual}
           onClearFiles={handleClearFiles}
           onParse={handleParse}
           onSaveConfig={handleSaveConfig}

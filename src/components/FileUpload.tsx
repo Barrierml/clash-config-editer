@@ -12,6 +12,7 @@ interface FileUploadProps {
   onManualChange: (value: string) => void;
   onFilesAdded: (files: { name: string; content: string }[]) => void;
   onRemoveFile: (id: string) => void;
+  onClearManual: () => void;
   onClearFiles: () => void;
   onParse: () => void;
   onSaveConfig: (name: string) => void;
@@ -38,6 +39,7 @@ export function FileUpload({
   onManualChange,
   onFilesAdded,
   onRemoveFile,
+  onClearManual,
   onClearFiles,
   onParse,
   onSaveConfig,
@@ -116,7 +118,7 @@ export function FileUpload({
             variant="ghost"
             className="w-full"
             onClick={() => {
-              onManualChange('');
+              onClearManual();
               if (fileInputRef.current) {
                 fileInputRef.current.value = '';
               }
