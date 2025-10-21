@@ -12,6 +12,7 @@ interface NodeTableProps {
 
 export function NodeTable({ nodes, selected, onToggle, onSelectMany }: NodeTableProps) {
   const [search, setSearch] = React.useState('');
+  const headerCheckboxRef = React.useRef<HTMLInputElement>(null);
 
   const filtered = React.useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -23,7 +24,13 @@ export function NodeTable({ nodes, selected, onToggle, onSelectMany }: NodeTable
     );
   }, [nodes, search]);
 
-  const isAllSelected = filtered.every((node) => selected.has(node.name));
+  const isAllSelected = filtered.length > 0 && filtered.every((node) => selected.has(node.name));
+  const hasSomeSelected = filtered.some((node) => selected.has(node.name));
+
+  React.useEffect(() => {
+    if (!headerCheckboxRef.current) return;
+    headerCheckboxRef.current.indeterminate = hasSomeSelected && !isAllSelected;
+  }, [hasSomeSelected, isAllSelected]);
 
   return (
     <div className="space-y-3">
@@ -38,25 +45,58 @@ export function NodeTable({ nodes, selected, onToggle, onSelectMany }: NodeTable
             onChange={(event) => setSearch(event.target.value)}
             className="sm:w-64"
           />
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() =>
-              onSelectMany(
-                filtered.map((node) => node.name),
-                !isAllSelected
-              )
-            }
-          >
-            {isAllSelected ? 'Unselect filtered' : 'Select filtered'}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onSelectMany(nodes.map((node) => node.name), true)}
+              disabled={nodes.length === 0}
+            >
+              Select all
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() =>
+                onSelectMany(
+                  filtered.map((node) => node.name),
+                  !isAllSelected
+                )
+              }
+              disabled={filtered.length === 0}
+            >
+              {isAllSelected ? 'Unselect filtered' : 'Select filtered'}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => onSelectMany(Array.from(selected), false)}
+              disabled={selected.size === 0}
+            >
+              Clear selection
+            </Button>
+          </div>
         </div>
       </div>
       <div className="max-h-[360px] overflow-auto rounded-xl border border-border bg-secondary/30 scrollbar-thin">
         <table className="min-w-full divide-y divide-border/60 text-left text-sm">
           <thead className="bg-secondary/40">
             <tr>
-              <th className="px-4 py-3 font-medium">Select</th>
+              <th className="px-4 py-3 font-medium">
+                <input
+                  type="checkbox"
+                  ref={headerCheckboxRef}
+                  className="h-4 w-4 rounded border-border"
+                  checked={isAllSelected}
+                  onChange={(event) =>
+                    onSelectMany(
+                      filtered.map((node) => node.name),
+                      event.target.checked
+                    )
+                  }
+                  aria-label="Toggle selection for filtered nodes"
+                />
+              </th>
               <th className="px-4 py-3 font-medium">Name</th>
               <th className="px-4 py-3 font-medium">Type</th>
               <th className="px-4 py-3 font-medium">Server</th>
@@ -69,7 +109,8 @@ export function NodeTable({ nodes, selected, onToggle, onSelectMany }: NodeTable
               return (
                 <tr
                   key={node.name}
-                  className={isSelected ? 'bg-primary/10' : 'hover:bg-secondary/40'}
+                  className={`${isSelected ? 'bg-primary/10' : 'hover:bg-secondary/40'} cursor-pointer`}
+                  onClick={() => onToggle(node.name)}
                 >
                   <td className="px-4 py-2">
                     <input
@@ -77,6 +118,7 @@ export function NodeTable({ nodes, selected, onToggle, onSelectMany }: NodeTable
                       className="h-4 w-4 rounded border-border"
                       checked={isSelected}
                       onChange={() => onToggle(node.name)}
+                      onClick={(event) => event.stopPropagation()}
                     />
                   </td>
                   <td className="px-4 py-2 font-medium">

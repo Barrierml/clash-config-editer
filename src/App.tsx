@@ -130,6 +130,26 @@ function ConfigGeneratorApp(): JSX.Element {
     );
   };
 
+  const removeNodes = (id: string, nodeNames: string[]) => {
+    if (nodeNames.length === 0) return;
+    setPools((prev) =>
+      prev.map((pool) =>
+        pool.id === id
+          ? {
+              ...pool,
+              proxies: pool.proxies.filter((proxy) => !nodeNames.includes(proxy))
+            }
+          : pool
+      )
+    );
+  };
+
+  const clearPoolNodes = (id: string) => {
+    setPools((prev) =>
+      prev.map((pool) => (pool.id === id ? { ...pool, proxies: [] } : pool))
+    );
+  };
+
   const updateSettings = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     setSettings((prev) => ({ ...prev, [key]: value }));
   };
@@ -255,6 +275,8 @@ function ConfigGeneratorApp(): JSX.Element {
           onDeletePool={deletePool}
           onAssignNodes={assignNodes}
           onRemoveNode={removeNode}
+          onRemoveNodes={removeNodes}
+          onClearNodes={clearPoolNodes}
         />
       </section>
 
