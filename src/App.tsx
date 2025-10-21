@@ -81,7 +81,7 @@ function ConfigGeneratorApp(): JSX.Element {
     setSelectedNodes(new Set());
   }, [yamlText]);
 
-  const toggleNode = (name: string) => {
+  const toggleNode = React.useCallback((name: string) => {
     setSelectedNodes((prev) => {
       const next = new Set(prev);
       if (next.has(name)) {
@@ -91,9 +91,9 @@ function ConfigGeneratorApp(): JSX.Element {
       }
       return next;
     });
-  };
+  }, []);
 
-  const selectMany = (names: string[], select = true) => {
+  const selectMany = React.useCallback((names: string[], select = true) => {
     setSelectedNodes((prev) => {
       const next = new Set(prev);
       for (const name of names) {
@@ -105,7 +105,7 @@ function ConfigGeneratorApp(): JSX.Element {
       }
       return next;
     });
-  };
+  }, []);
 
   const createPool = () => {
     setPools((prev) => {
