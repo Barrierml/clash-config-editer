@@ -3,6 +3,51 @@ import type { ProxyNode } from '../types';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 
+interface NodeRowProps {
+  node: ProxyNode;
+  isSelected: boolean;
+  onToggle: (name: string) => void;
+}
+
+const NodeRow = React.memo(
+  function NodeRow({ node, isSelected, onToggle }: NodeRowProps) {
+    const handleToggle = React.useCallback(() => {
+      onToggle(node.name);
+    }, [node.name, onToggle]);
+
+    const handleCheckboxClick = React.useCallback((event: React.MouseEvent<HTMLInputElement>) => {
+      event.stopPropagation();
+    }, []);
+
+    return (
+      <tr
+        className={`${isSelected ? 'bg-primary/10' : 'hover:bg-secondary/40'} cursor-pointer`}
+        onClick={handleToggle}
+      >
+        <td className="px-4 py-2">
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-border"
+            checked={isSelected}
+            onChange={handleToggle}
+            onClick={handleCheckboxClick}
+          />
+        </td>
+        <td className="px-4 py-2 font-medium">
+          <div className="flex items-center gap-2">
+            <span>{node.country ?? '🌐'}</span>
+            <span>{node.name}</span>
+          </div>
+        </td>
+        <td className="px-4 py-2 text-muted-foreground">{node.type ?? '—'}</td>
+        <td className="px-4 py-2 text-muted-foreground">{node.server ?? '—'}</td>
+        <td className="px-4 py-2 text-muted-foreground">{node.port ?? '—'}</td>
+      </tr>
+    );
+  },
+  (prev, next) => prev.isSelected === next.isSelected && prev.node === next.node && prev.onToggle === next.onToggle
+);
+
 interface NodeTableProps {
   nodes: ProxyNode[];
   selected: Set<string>;
@@ -12,17 +57,21 @@ interface NodeTableProps {
 
 export function NodeTable({ nodes, selected, onToggle, onSelectMany }: NodeTableProps) {
   const [search, setSearch] = React.useState('');
+  const deferredSearch = React.useDeferredValue(search);
   const headerCheckboxRef = React.useRef<HTMLInputElement>(null);
 
   const filtered = React.useMemo(() => {
-    const keyword = search.trim().toLowerCase();
+    const keyword = deferredSearch.trim().toLowerCase();
     if (!keyword) return nodes;
     return nodes.filter((node) =>
       [node.name, node.server, node.type]
         .filter(Boolean)
         .some((value) => value!.toString().toLowerCase().includes(keyword))
     );
-  }, [nodes, search]);
+  }, [deferredSearch, nodes]);
+
+  const filteredNames = React.useMemo(() => filtered.map((node) => node.name), [filtered]);
+  const allNodeNames = React.useMemo(() => nodes.map((node) => node.name), [nodes]);
 
   const isAllSelected = filtered.length > 0 && filtered.every((node) => selected.has(node.name));
   const hasSomeSelected = filtered.some((node) => selected.has(node.name));
@@ -49,7 +98,7 @@ export function NodeTable({ nodes, selected, onToggle, onSelectMany }: NodeTable
             <Button
               type="button"
               variant="outline"
-              onClick={() => onSelectMany(nodes.map((node) => node.name), true)}
+              onClick={() => onSelectMany(allNodeNames, true)}
               disabled={nodes.length === 0}
             >
               Select all
@@ -58,10 +107,7 @@ export function NodeTable({ nodes, selected, onToggle, onSelectMany }: NodeTable
               type="button"
               variant="outline"
               onClick={() =>
-                onSelectMany(
-                  filtered.map((node) => node.name),
-                  !isAllSelected
-                )
+                onSelectMany(filteredNames, !isAllSelected)
               }
               disabled={filtered.length === 0}
             >
@@ -89,10 +135,7 @@ export function NodeTable({ nodes, selected, onToggle, onSelectMany }: NodeTable
                   className="h-4 w-4 rounded border-border"
                   checked={isAllSelected}
                   onChange={(event) =>
-                    onSelectMany(
-                      filtered.map((node) => node.name),
-                      event.target.checked
-                    )
+                    onSelectMany(filteredNames, event.target.checked)
                   }
                   aria-label="Toggle selection for filtered nodes"
                 />
@@ -104,35 +147,9 @@ export function NodeTable({ nodes, selected, onToggle, onSelectMany }: NodeTable
             </tr>
           </thead>
           <tbody className="divide-y divide-border/40">
-            {filtered.map((node) => {
-              const isSelected = selected.has(node.name);
-              return (
-                <tr
-                  key={node.name}
-                  className={`${isSelected ? 'bg-primary/10' : 'hover:bg-secondary/40'} cursor-pointer`}
-                  onClick={() => onToggle(node.name)}
-                >
-                  <td className="px-4 py-2">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-border"
-                      checked={isSelected}
-                      onChange={() => onToggle(node.name)}
-                      onClick={(event) => event.stopPropagation()}
-                    />
-                  </td>
-                  <td className="px-4 py-2 font-medium">
-                    <div className="flex items-center gap-2">
-                      <span>{node.country ?? '🌐'}</span>
-                      <span>{node.name}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-2 text-muted-foreground">{node.type ?? '—'}</td>
-                  <td className="px-4 py-2 text-muted-foreground">{node.server ?? '—'}</td>
-                  <td className="px-4 py-2 text-muted-foreground">{node.port ?? '—'}</td>
-                </tr>
-              );
-            })}
+            {filtered.map((node) => (
+              <NodeRow key={node.name} node={node} isSelected={selected.has(node.name)} onToggle={onToggle} />
+            ))}
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-6 text-center text-muted-foreground">
