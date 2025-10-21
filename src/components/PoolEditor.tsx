@@ -15,6 +15,8 @@ interface PoolEditorProps {
   onDeletePool: (id: string) => void;
   onAssignNodes: (id: string, nodes: string[]) => void;
   onRemoveNode: (id: string, nodeName: string) => void;
+  onRemoveNodes: (id: string, nodeNames: string[]) => void;
+  onClearNodes: (id: string) => void;
 }
 
 export function PoolEditor({
@@ -24,7 +26,9 @@ export function PoolEditor({
   onUpdatePool,
   onDeletePool,
   onAssignNodes,
-  onRemoveNode
+  onRemoveNode,
+  onRemoveNodes,
+  onClearNodes
 }: PoolEditorProps) {
   return (
     <div className="space-y-4">
@@ -52,9 +56,20 @@ export function PoolEditor({
             <CardHeader className="pb-4">
               <CardTitle className="flex items-center justify-between text-base">
                 <span>{pool.name || 'Unnamed Pool'}</span>
-                <Button type="button" variant="ghost" size="sm" onClick={() => onDeletePool(pool.id)}>
-                  Remove
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onClearNodes(pool.id)}
+                    disabled={pool.proxies.length === 0}
+                  >
+                    Clear nodes
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => onDeletePool(pool.id)}>
+                    Remove
+                  </Button>
+                </div>
               </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-1 flex-col gap-4">
@@ -96,15 +111,31 @@ export function PoolEditor({
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <Label className="text-xs uppercase tracking-wide text-muted-foreground">Nodes</Label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={selectedNodes.length === 0}
-                    onClick={() => onAssignNodes(pool.id, selectedNodes)}
-                  >
-                    Assign selected ({selectedNodes.length})
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={selectedNodes.length === 0}
+                      onClick={() => onAssignNodes(pool.id, selectedNodes)}
+                    >
+                      Assign selected ({selectedNodes.length})
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={pool.proxies.every((proxy) => !selectedNodes.includes(proxy))}
+                      onClick={() =>
+                        onRemoveNodes(
+                          pool.id,
+                          pool.proxies.filter((proxy) => selectedNodes.includes(proxy))
+                        )
+                      }
+                    >
+                      Remove selected
+                    </Button>
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {pool.proxies.map((proxy) => (
