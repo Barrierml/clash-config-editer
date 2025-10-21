@@ -39,3 +39,17 @@ export interface AppSettings {
   logLevel: 'info' | 'warning' | 'error' | 'debug';
   proxyExportMode: ProxyExportMode;
 }
+
+export interface UploadedConfigSource {
+  id: string;
+  name: string;
+  content: string;
+}
+
+export interface SavedConfig {
+  id: string;
+  name: string;
+  manualText: string;
+  files: UploadedConfigSource[];
+  createdAt: number;
+}
