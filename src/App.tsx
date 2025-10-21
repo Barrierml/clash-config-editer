@@ -13,6 +13,7 @@ import { parseClashConfig } from './lib/parser';
 
 const POOL_STORAGE_KEY = 'ccg:pools';
 const SETTINGS_STORAGE_KEY = 'ccg:settings';
+const BASE_POOL_PORT = 7890;
 
 function generateId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -21,14 +22,25 @@ function generateId() {
   return `pool-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function createPoolTemplate(index: number): ProxyPool {
-  return {
-    id: generateId(),
-    name: `Pool ${index + 1}`,
-    strategy: 'random',
-    port: 7890 + index,
-    proxies: []
-  };
+function getNextAvailablePort(usedPorts: Set<number>, start = BASE_POOL_PORT) {
+  let candidate = start;
+  while (usedPorts.has(candidate)) {
+    candidate += 1;
+  }
+  return candidate;
+}
+
+function ensureUniqueName(base: string, usedNames: Set<string>) {
+  if (!usedNames.has(base)) {
+    return base;
+  }
+  let counter = 2;
+  let candidate = `${base} (${counter})`;
+  while (usedNames.has(candidate)) {
+    counter += 1;
+    candidate = `${base} (${counter})`;
+  }
+  return candidate;
 }
 
 function ConfigGeneratorApp(): JSX.Element {
@@ -42,7 +54,8 @@ function ConfigGeneratorApp(): JSX.Element {
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
     setPools(readState<ProxyPool[]>(POOL_STORAGE_KEY, []));
-    setSettings(readState<AppSettings>(SETTINGS_STORAGE_KEY, DEFAULT_SETTINGS));
+    const restoredSettings = readState<AppSettings>(SETTINGS_STORAGE_KEY, DEFAULT_SETTINGS);
+    setSettings({ ...DEFAULT_SETTINGS, ...restoredSettings });
   }, []);
 
   React.useEffect(() => {
@@ -95,7 +108,51 @@ function ConfigGeneratorApp(): JSX.Element {
   };
 
   const createPool = () => {
-    setPools((prev) => [...prev, createPoolTemplate(prev.length)]);
+    setPools((prev) => {
+      const usedPorts = new Set(prev.map((pool) => pool.port));
+      const usedNames = new Set(prev.map((pool) => pool.name));
+      const name = ensureUniqueName(`Pool ${prev.length + 1}`, usedNames);
+      const port = getNextAvailablePort(usedPorts);
+      return [
+        ...prev,
+        {
+          id: generateId(),
+          name,
+          strategy: 'random',
+          port,
+          proxies: []
+        }
+      ];
+    });
+  };
+
+  const createPoolsFromSelection = () => {
+    setPools((prev) => {
+      const selected = Array.from(selectedNodes);
+      if (selected.length === 0) return prev;
+
+      const usedPorts = new Set(prev.map((pool) => pool.port));
+      const usedNames = new Set(prev.map((pool) => pool.name));
+      const nextPools = [...prev];
+      let searchStart = BASE_POOL_PORT;
+
+      for (const proxyName of selected) {
+        const name = ensureUniqueName(proxyName, usedNames);
+        const port = getNextAvailablePort(usedPorts, searchStart);
+        usedNames.add(name);
+        usedPorts.add(port);
+        searchStart = port + 1;
+        nextPools.push({
+          id: generateId(),
+          name,
+          strategy: 'random',
+          port,
+          proxies: [proxyName]
+        });
+      }
+
+      return nextPools;
+    });
   };
 
   const updatePool = (id: string, patch: Partial<ProxyPool>) => {
@@ -156,8 +213,8 @@ function ConfigGeneratorApp(): JSX.Element {
 
   const generatedYaml = React.useMemo(() => {
     if (nodes.length === 0) return '';
-    return generateConfigYaml(settings, pools, nodes);
-  }, [nodes, pools, settings]);
+    return generateConfigYaml(settings, pools, nodes, Array.from(selectedNodes));
+  }, [nodes, pools, settings, selectedNodes]);
 
   const handleCopy = async () => {
     if (!generatedYaml) return;
@@ -234,6 +291,22 @@ function ConfigGeneratorApp(): JSX.Element {
                 onChange={(event) => updateSettings('secret', event.target.value)}
               />
             </div>
+            <div className="space-y-1">
+              <Label htmlFor="proxy-export-mode">Proxy Export</Label>
+              <Select
+                id="proxy-export-mode"
+                value={settings.proxyExportMode}
+                onChange={(event) =>
+                  updateSettings('proxyExportMode', event.target.value as AppSettings['proxyExportMode'])
+                }
+              >
+                <option value="all">Include all proxies</option>
+                <option value="selected">Only selected proxies</option>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Choose whether to export every proxy or just the ones currently selected above.
+              </p>
+            </div>
             <div className="flex items-center justify-between rounded-lg border border-border/60 bg-secondary/30 p-3">
               <div>
                 <p className="text-sm font-medium">Allow LAN</p>
@@ -271,6 +344,7 @@ function ConfigGeneratorApp(): JSX.Element {
           pools={pools}
           selectedNodes={Array.from(selectedNodes)}
           onCreatePool={createPool}
+          onCreatePoolsFromSelection={createPoolsFromSelection}
           onUpdatePool={updatePool}
           onDeletePool={deletePool}
           onAssignNodes={assignNodes}

@@ -17,9 +17,12 @@ export interface ProxyPool {
   proxies: string[];
 }
 
+export type ProxyExportMode = 'all' | 'selected';
+
 export interface AppSettings {
   controllerPort: number;
   secret: string;
   allowLan: boolean;
   logLevel: 'info' | 'warning' | 'error' | 'debug';
+  proxyExportMode: ProxyExportMode;
 }
