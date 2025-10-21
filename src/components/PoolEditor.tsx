@@ -11,6 +11,7 @@ interface PoolEditorProps {
   pools: ProxyPool[];
   selectedNodes: string[];
   onCreatePool: () => void;
+  onCreatePoolsFromSelection: () => void;
   onUpdatePool: (id: string, patch: Partial<ProxyPool>) => void;
   onDeletePool: (id: string) => void;
   onAssignNodes: (id: string, nodes: string[]) => void;
@@ -23,6 +24,7 @@ export function PoolEditor({
   pools,
   selectedNodes,
   onCreatePool,
+  onCreatePoolsFromSelection,
   onUpdatePool,
   onDeletePool,
   onAssignNodes,
@@ -30,6 +32,16 @@ export function PoolEditor({
   onRemoveNodes,
   onClearNodes
 }: PoolEditorProps) {
+  const [creationMode, setCreationMode] = React.useState<'single' | 'per-selection'>('single');
+
+  const handleCreate = () => {
+    if (creationMode === 'per-selection') {
+      onCreatePoolsFromSelection();
+    } else {
+      onCreatePool();
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -39,9 +51,24 @@ export function PoolEditor({
             Create pools and assign nodes from your current selection.
           </p>
         </div>
-        <Button type="button" onClick={onCreatePool}>
-          Add Pool
-        </Button>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <Select
+            value={creationMode}
+            onChange={(event) => setCreationMode(event.target.value as 'single' | 'per-selection')}
+            aria-label="Pool creation mode"
+            className="sm:w-64"
+          >
+            <option value="single">Add an empty pool</option>
+            <option value="per-selection">Create a pool for each selected proxy</option>
+          </Select>
+          <Button
+            type="button"
+            onClick={handleCreate}
+            disabled={creationMode === 'per-selection' && selectedNodes.length === 0}
+          >
+            {creationMode === 'per-selection' ? 'Add from selection' : 'Add Pool'}
+          </Button>
+        </div>
       </div>
 
       {pools.length === 0 && (

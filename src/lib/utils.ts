@@ -20,7 +20,8 @@ export function dedupeNodes(nodes: ProxyNode[]): ProxyNode[] {
 export function generateConfigYaml(
   settings: AppSettings,
   pools: ProxyPool[],
-  proxies: ProxyNode[]
+  proxies: ProxyNode[],
+  selectedProxyNames: string[]
 ): string {
   const listeners = pools.map((pool) => ({
     name: `mixed-${pool.port}`,
@@ -44,6 +45,12 @@ export function generateConfigYaml(
     rules.push('MATCH,DIRECT');
   }
 
+  const selectedProxySet = new Set(selectedProxyNames);
+  const proxiesToInclude =
+    settings.proxyExportMode === 'all'
+      ? proxies
+      : proxies.filter((proxy) => selectedProxySet.has(proxy.name));
+
   const payload: Record<string, unknown> = {
     'allow-lan': settings.allowLan,
     mode: 'rule',
@@ -51,7 +58,7 @@ export function generateConfigYaml(
     'external-controller': `0.0.0.0:${settings.controllerPort}`,
     secret: settings.secret ?? '',
     listeners,
-    proxies: proxies.map((proxy) => proxy.raw),
+    proxies: proxiesToInclude.map((proxy) => proxy.raw),
     'proxy-groups': proxyGroups,
     rules
   };
@@ -63,7 +70,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   controllerPort: 9090,
   secret: '',
   allowLan: true,
-  logLevel: 'info'
+  logLevel: 'info',
+  proxyExportMode: 'all'
 };
 
 export function persistState<T>(key: string, value: T) {
