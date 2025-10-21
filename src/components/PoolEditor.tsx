@@ -1,5 +1,6 @@
 import * as React from 'react';
 import type { ProxyPool } from '../types';
+import { LOAD_BALANCE_STRATEGIES } from '../types';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Input } from './ui/input';
@@ -117,8 +118,11 @@ export function PoolEditor({
                       onUpdatePool(pool.id, { strategy: event.target.value as ProxyPool['strategy'] })
                     }
                   >
-                    <option value="random">random</option>
-                    <option value="round-robin">round-robin</option>
+                    {LOAD_BALANCE_STRATEGIES.map((strategy) => (
+                      <option key={strategy} value={strategy}>
+                        {strategy}
+                      </option>
+                    ))}
                   </Select>
                 </div>
                 <div className="space-y-1">

@@ -15,7 +15,7 @@
 
 ## 创建代理池 / Creating Proxy Pools
 1. **新建 / Create**：在 *Proxy Pools* 区域选择创建模式，点击 **Add Pool** 或 **Add from selection**。
-2. **配置 / Configure**：为每个池设置名称、策略（random / round-robin）以及监听端口。
+2. **配置 / Configure**：为每个池设置名称、策略（round-robin / consistent-hashing / sticky-sessions）以及监听端口。
 3. **分配节点 / Assign Nodes**：使用 **Assign selected** 将当前选中的节点加入池中；如需移除，请使用 **Remove selected** 或直接点击徽章上的“×”。
 
 ## 运行时设置 / Runtime Settings

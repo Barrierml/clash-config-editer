@@ -8,12 +8,20 @@ import { Input } from './components/ui/input';
 import { Label } from './components/ui/label';
 import { Select } from './components/ui/select';
 import type { AppSettings, ProxyNode, ProxyPool } from './types';
+import { LOAD_BALANCE_STRATEGIES, normalizeStrategy } from './types';
 import { DEFAULT_SETTINGS, generateConfigYaml, persistState, readState } from './lib/utils';
 import { parseClashConfig } from './lib/parser';
 
 const POOL_STORAGE_KEY = 'ccg:pools';
 const SETTINGS_STORAGE_KEY = 'ccg:settings';
 const BASE_POOL_PORT = 7890;
+
+function sanitizePool(pool: ProxyPool): ProxyPool {
+  return {
+    ...pool,
+    strategy: normalizeStrategy(pool.strategy)
+  };
+}
 
 function generateId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -64,7 +72,8 @@ function ConfigGeneratorApp(): JSX.Element {
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
-    setPools(readState<ProxyPool[]>(POOL_STORAGE_KEY, []));
+    const restoredPools = readState<ProxyPool[]>(POOL_STORAGE_KEY, []).map(sanitizePool);
+    setPools(restoredPools);
     const restoredSettings = readState<AppSettings>(SETTINGS_STORAGE_KEY, DEFAULT_SETTINGS);
     setSettings({ ...DEFAULT_SETTINGS, ...restoredSettings });
   }, []);
@@ -133,7 +142,7 @@ function ConfigGeneratorApp(): JSX.Element {
         {
           id: generateId(),
           name,
-          strategy: 'random',
+          strategy: LOAD_BALANCE_STRATEGIES[0],
           port,
           proxies: []
         }
@@ -161,7 +170,7 @@ function ConfigGeneratorApp(): JSX.Element {
         nextPools.push({
           id: generateId(),
           name,
-          strategy: 'random',
+          strategy: LOAD_BALANCE_STRATEGIES[0],
           port,
           proxies: [proxyName]
         });
@@ -186,7 +195,7 @@ function ConfigGeneratorApp(): JSX.Element {
             ? { ...patch, name: ensureUniqueName(patch.name, usedNames, nodeNames) }
             : patch;
 
-        return { ...pool, ...nextPatch, proxies: pool.proxies };
+        return sanitizePool({ ...pool, ...nextPatch, proxies: pool.proxies });
       });
     });
   };
